@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WHITE SPACE: MARBLE RUN</title>
+<link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<style>
+:root{--paper:#fff;--ink:#0d0d0d;--gray:#4a4a4a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#0d0d0d;--ink:#f2f2f2;--gray:#a8a8a8}}
+:root[data-theme="dark"]{--paper:#0d0d0d;--ink:#f2f2f2;--gray:#a8a8a8}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:'Architects Daughter',cursive;font-size:16px}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.08;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:3px solid var(--ink)}
+h1{font:14px 'Press Start 2P',monospace;margin:0}
+.sub{font:12px 'Press Start 2P',monospace;color:var(--gray)}
+#lvl{font:22px 'VT323',monospace;margin-left:6px}
+.sp{flex:1}
+button{font:inherit;background:var(--paper);color:var(--ink);border:2px solid var(--ink);padding:6px 11px;cursor:pointer;border-radius:3px 8px 4px 7px}
+button:hover,button.on{background:var(--ink);color:var(--paper)}
+button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
+main{display:flex;gap:14px;justify-content:center;align-items:flex-start;padding:12px;flex-wrap:wrap}
+#tools{display:flex;flex-direction:column;gap:8px}
+.tool{width:78px;padding:6px 4px;position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px}
+.tool svg{width:34px;height:34px;stroke:currentColor;fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.tool b{position:absolute;top:-8px;right:-8px;background:var(--ink);color:var(--paper);font:16px 'VT323',monospace;min-width:22px;border-radius:50%;border:2px solid var(--paper)}
+section{flex:1 1 320px;max-width:800px}
+canvas{width:100%;aspect-ratio:4/3;border:3px solid var(--ink);border-radius:2px 6px 3px 7px/6px 2px 7px 3px;touch-action:none;display:block;cursor:crosshair;background:var(--paper)}
+.ctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+#hud{font:22px 'VT323',monospace;margin-left:auto}
+#dlg{max-width:826px;min-height:92px;margin:0 auto 16px;width:calc(100% - 24px);border:3px solid var(--ink);padding:10px 16px;font:23px/1.2 'VT323',monospace;background:var(--paper);position:relative}
+#dlg small{font:10px 'Press Start 2P',monospace;display:block;margin-bottom:6px;color:var(--gray)}
+#dlg::after{content:"▼";position:absolute;right:12px;bottom:6px;animation:bl 1s steps(2) infinite}
+@keyframes bl{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){#dlg::after{animation:none}}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:5;padding:16px}
+.box{background:var(--paper);border:3px solid var(--ink);padding:18px;max-width:440px;width:100%;max-height:90%;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.box h2{font:13px 'Press Start 2P',monospace;margin:0 0 6px}
+.box p{margin:0;line-height:1.35}
+@media(max-width:700px){#tools{flex-direction:row;width:100%;justify-content:center;flex-wrap:wrap}}
+</style></head><body>
+<header><h1>WHITE SPACE</h1><span class="sub">MARBLE RUN</span><span id="lvl"></span><span class="sp"></span>
+<button id="bLv">Levels</button><button id="bSnd">Sound: on</button><button id="bGd">Guide</button></header>
+<main><aside id="tools"></aside>
+<section><canvas id="c" width="800" height="600"></canvas>
+<div class="ctl"><button id="bPlay">Play</button><button id="bReset">Reset</button><button id="bClear">Clear</button><button id="bSpd">Speed 1x</button><button id="bFlip">Flip (R)</button><span id="hud"></span></div></section></main>
+<div id="dlg"></div>
+<div id="modal" hidden><div class="box" id="mbox"></div></div>
+<script>
+const {Engine,Bodies,Body,Composite,Events,Bounds}=Matter;
+const W=800,H=600,G=20,F_UP=.0013,F_SIDE=.0008;
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+const INF=Infinity;
+const LV0=[
+{n:'First Drop',s:[110,70],g:[690,552],stars:[[330,330]],walls:[],inv:{slope:3,plank:2,spring:0,fan:0},
+ intro:`A white room. A small black marble sits in the air, waiting. Give it a path home.`,
+ lore:`The marble rolls into the dark. A memory returns: a hallway light left on at night.`,
+ deep:`Log 01: I counted the ceiling tiles until the footsteps stopped. There were 41.`},
+{n:'The Wall',s:[110,70],g:[690,552],stars:[[400,170]],walls:[[400,430,24,300]],inv:{slope:2,plank:1,spring:2,fan:0},
+ intro:`Something tall stands in the way. Springs can throw the marble past what it can’t walk through.`,
+ lore:`The marble clears the wall. A memory returns: a door that was always closed.`,
+ deep:`Log 02: Nobody told me what was behind it. Not telling me was the answer.`},
+{n:'Updraft',s:[110,70],g:[690,552],stars:[[250,120],[560,300]],walls:[[420,400,24,400]],inv:{slope:2,plank:1,spring:0,fan:2},
+ intro:`Wind can carry things. Place a fan, then press Flip to turn it from up to sideways.`,
+ lore:`The marble drifts on the draft. A memory returns: curtains moving with no window open.`,
+ deep:`Log 03: I told everyone it was the wind. I wanted it to be the wind.`},
+{n:'Two Walls',s:[110,70],g:[700,552],stars:[[410,150],[620,230]],walls:[[300,430,24,300],[540,370,24,420]],inv:{slope:3,plank:2,spring:2,fan:1},
+ intro:`Two walls now. Combine everything you have. It’s okay if it takes a few tries.`,
+ lore:`The marble reaches the vortex. The last memory returns, and it is quieter than you feared.`,
+ deep:`Log 04: It wasn’t my fault. I’m writing that down so I can read it again later.`},
+{n:'Sandbox',s:[110,70],g:[690,552],stars:[],walls:[],inv:{slope:INF,plank:INF,spring:INF,fan:INF},
+ intro:`Sandbox. Nothing is lost here. Build whatever you like.`,lore:`The marble finds the vortex again. It always does.`,deep:``}];
+const AREAS=[{k:'White Space',sub:'The white void. Quiet and familiar.',gr:1},{k:'Headspace',sub:'The dream realm. Gravity is floaty.',gr:.75},{k:'Faraway Town',sub:'The real world. Gravity is normal.',gr:1},{k:'Black Space',sub:'The subconscious. Heavy, and inverted.',gr:1.25}];
+const NW=[
+{a:2,n:'Bus Stop',s:[110,70],g:[690,552],stars:[[260,330]],walls:[[300,500,24,160]],inv:{slope:2,plank:1,spring:1,fan:0},
+ intro:`Real streets, real weather. Even a small curb can stop a marble.`,
+ lore:`The marble rolls past the stop. A memory returns: waiting for a bus that never came.`,
+ deep:`Log 05: I stood there until the lights went out. Nobody asked where I was.`},
+{a:2,n:'Rooftops',s:[110,70],g:[690,552],stars:[[230,250],[560,200]],walls:[[230,300,200,20],[560,420,24,320]],inv:{slope:3,plank:1,spring:2,fan:0},
+ intro:`The town looks smaller from above. Use the ledge, then find a way over the tall wall.`,
+ lore:`The marble crosses the roofs. A memory returns: a friend’s window, lit, and then dark.`,
+ deep:`Log 06: I never knocked. I told myself they were asleep.`},
+{a:2,n:'Empty Streets',s:[110,70],g:[700,552],stars:[[400,300]],walls:[[300,460,24,240],[500,400,24,360]],inv:{slope:2,plank:2,spring:1,fan:1},
+ intro:`Nobody is out tonight. Two walls of quiet stand between the marble and home.`,
+ lore:`The marble finds the end of the street. A memory returns: the sound of my own footsteps.`,
+ deep:`Log 07: Walking faster didn’t help. The quiet kept pace with me.`},
+{a:3,n:'Static',s:[110,70],g:[690,552],stars:[[400,300]],walls:[[400,350,300,20]],inv:{slope:3,plank:1,spring:1,fan:1},
+ intro:`Black Space. Everything is heavier here, and the colors have turned over.`,
+ lore:`The marble slips through the noise. A memory returns: a voice saying my name from far away.`,
+ deep:`Log 08: I answered. That is the part I keep forgetting.`},
+{a:3,n:'Echo',s:[110,70],g:[690,552],stars:[[250,200],[600,120]],walls:[[250,450,24,260],[450,380,24,400]],inv:{slope:2,plank:1,spring:2,fan:2},
+ intro:`Each thing you build comes back as an echo. Heavy gravity makes fans matter more.`,
+ lore:`The marble outruns the echo. A memory returns: a room that was smaller than I remembered.`,
+ deep:`Log 09: Nothing in it was as big as it felt. Not even the fear.`}];
+const HS=[
+{a:1,n:'Sky Garden',s:[110,70],g:[690,552],stars:[[420,180]],walls:[[420,470,24,220]],inv:{slope:2,plank:1,spring:1,fan:1},
+ intro:`Pink leaves, purple sky. Anything can float here if you let it.`,
+ lore:`The marble drifts over the garden. A memory returns: a picnic, and everyone still smiling.`,
+ deep:`The picnic was real. I just didn’t know it was the last one.`},
+{a:1,n:'Rainbow Stairs',s:[110,70],g:[700,552],stars:[[300,240],[600,250]],walls:[[300,430,24,300],[480,340,160,20]],inv:{slope:3,plank:2,spring:1,fan:1},
+ intro:`A staircase of colors leads somewhere high. A giant cat watches, unimpressed.`,
+ lore:`The marble climbs the colors. A memory returns: a stairwell, and a door left open a crack.`,
+ deep:`I sat on the landing and listened. Nobody called me down, and nobody came up.`}];
+const LV=[{...LV0[0],a:0},{...LV0[1],a:0},{...LV0[2],a:1},HS[0],HS[1],NW[0],NW[1],NW[2],NW[3],NW[4],{...LV0[3],a:3,intro:`The last two walls. Everything is heavy here. Use all of it.`},LV0[4]];
+const SB=LV.length-1;
+const PAL=[{p:'#ffffff',i:'#0d0d0d',g:'#4a4a4a'},{p:'#6a24d8',i:'#f1e6ff',g:'#b99cf5'},{p:'#bfe3ff',i:'#1f2c3d',g:'#5c7a99'},{p:'#000000',i:'#ffffff',g:'#666666'}];
+function applyPal(a){const q=PAL[a===undefined?0:a],s=document.documentElement.style;s.setProperty('--paper',q.p);s.setProperty('--ink',q.i);s.setProperty('--gray',q.g)}
+const ICON={slope:'<path d="M6 10 L34 28"/>',plank:'<path d="M5 20 H35"/>',spring:'<path d="M8 32 H32 M12 32 L16 24 L24 30 L28 22"/><path d="M6 14 H34"/>',fan:'<circle cx="20" cy="22" r="4"/><path d="M20 18 V6 M16 22 H6 M24 22 H34 M20 26 V34"/>',erase:'<path d="M8 28 L22 8 L34 16 L20 34 Z"/>'};
+const NAMES={slope:'Slope',plank:'Plank',spring:'Spring',fan:'Fan',erase:'Eraser'};
+let engine,marble,items=[],lvl=0,tool='slope',flip=false,mode='build',speed=1,stars=[],got=0,trail=[],still=0,mouse=null,sound=true,done={},tick=0,lastPop=0;
+let INK,PAPER,GRAY,TK=0;
+const rem=t=>LV[lvl].inv[t]-items.filter(i=>i.type===t).length;
+
+/* ---------- audio ---------- */
+let ac,dr;
+function A(){if(!sound)return null;if(!ac){try{ac=new(window.AudioContext||window.webkitAudioContext)()}catch(e){return null}}
+ if(ac.state==='suspended')ac.resume();return ac}
+function drone(){const a=A();if(!a)return;if(!dr){dr=a.createGain();const o=a.createOscillator();o.type='sine';o.frequency.value=55;o.connect(dr).connect(a.destination);o.start()}dr.gain.value=.025}
+function tone(f,d,type='sine',v=.15,t0=0,f2){const a=A();if(!a)return;const o=a.createOscillator(),g=a.createGain(),t=a.currentTime+t0;
+ o.type=type;o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+d);
+ g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g).connect(a.destination);o.start(t);o.stop(t+d+.05)}
+const sfx={pop:v=>tone(80+Math.min(v,12)*30,.12,'sine',.18),click:()=>tone(300,.05,'square',.05),
+ spring:()=>tone(150,.25,'sawtooth',.08,0,600),
+ star:()=>[523.25,659.25,783.99,1046.5].forEach((f,i)=>{tone(f,.25,'sine',.12,i*.07);tone(f,.25,'sine',.04,i*.07+.16)}),
+ win:()=>[220,261.63,329.63,440,523.25,659.25].forEach((f,i)=>{tone(f,.7,'triangle',.12,i*.18);tone(f,.7,'triangle',.04,i*.18+.3)})};
+
+/* ---------- dialogue ---------- */
+let tw;
+function say(t){clearInterval(tw);const d=$('dlg');let i=0;d.innerHTML='<small>MEMORY</small><span></span>';const s=d.lastChild;
+ tw=setInterval(()=>{s.textContent=t.slice(0,++i);if(i>=t.length)clearInterval(tw)},22)}
+
+/* ---------- level / world ---------- */
+function mk(type,x,y,fl){
+ if(type==='slope')return{body:Bodies.rectangle(x,y,100,10,{isStatic:true,angle:fl?-.45:.45,friction:.02,restitution:.2,label:'slope'})};
+ if(type==='plank')return{body:Bodies.rectangle(x,y,100,10,{isStatic:true,friction:.02,restitution:.2,label:'plank'})};
+ if(type==='spring')return{body:Bodies.rectangle(x,y,64,14,{isStatic:true,label:'spring'})};
+ const dir=fl?[1,0]:[0,-1];
+ return{dir,body:Bodies.rectangle(fl?x+75:x,fl?y:y-75,fl?150:70,fl?70:150,{isStatic:true,isSensor:true,label:'fan'})}}
+function resetSim(){
+ mode='build';marble=null;trail=[];still=0;got=0;const L=LV[lvl];
+ stars=L.stars.map(p=>({x:p[0],y:p[1],t:false}));
+ engine=Engine.create();engine.gravity.y=AREAS[L.a]?AREAS[L.a].gr:1;
+ const ws=[[W/2,H-10,W,20],[-10,H/2,20,H*2],[W+10,H/2,20,H*2],...L.walls].map(w=>Bodies.rectangle(w[0],w[1],w[2],w[3],{isStatic:true,label:'wall',friction:.02}));
+ Composite.add(engine.world,ws);items.forEach(it=>Composite.add(engine.world,it.body));
+ Events.on(engine,'collisionStart',e=>{for(const p of e.pairs){const a=p.bodyA,b=p.bodyB,m=a===marble?a:b===marble?b:null;if(!m)continue;
+  const o=m===a?b:a;if(o.isSensor)continue;
+  if(o.label==='spring'){Body.setVelocity(m,{x:m.velocity.x*.8,y:-13});sfx.spring()}
+  else{const v=Math.hypot(m.velocity.x,m.velocity.y),n=performance.now();if(v>2&&n-lastPop>80){lastPop=n;sfx.pop(v)}}}});
+ $('bPlay').textContent='Play';ui()}
+function load(i){lvl=i;items=[];applyPal(LV[i].a);if(tool!=='erase'&&!['slope','plank','spring','fan'].includes(tool))tool='slope';resetSim();const ar=AREAS[LV[i].a];say(ar&&LV.findIndex(l=>l.a===LV[i].a)===i?`${ar.k}. ${ar.sub} ${LV[i].intro}`:LV[i].intro);closeM()}
+function ui(){
+ const L=LV[lvl],AR=AREAS[L.a];$('lvl').textContent=AR?`${AR.k} ${LV.filter(l=>l.a===L.a).indexOf(L)+1}/${LV.filter(l=>l.a===L.a).length} · ${L.n}`:'SANDBOX';
+ $('tools').innerHTML=['slope','plank','spring','fan','erase'].map(k=>{const r=k==='erase'?null:rem(k);
+  return`<button class="tool${tool===k?' on':''}" data-k="${k}" aria-label="${NAMES[k]}"><svg viewBox="0 0 40 40">${ICON[k]}</svg>${NAMES[k]}${r===null?'':`<b>${r===INF?'∞':r}</b>`}</button>`}).join('');
+ $('bFlip').textContent=`Flip (R)${flip?' ◂':''}`}
+
+/* ---------- input ---------- */
+function pos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}}
+const snap=p=>({x:Math.round(p.x/G)*G,y:Math.round(p.y/G)*G});
+cv.addEventListener('pointermove',e=>{mouse=pos(e)});
+cv.addEventListener('pointerleave',()=>mouse=null);
+cv.addEventListener('contextmenu',e=>{e.preventDefault();flip=!flip;ui()});
+cv.addEventListener('pointerdown',e=>{
+ A();drone();const p=pos(e);mouse=p;
+ if(mode!=='build'){say(`Press Reset to edit your build.`);return}
+ if(tool==='erase'){let bi=-1,bd=45;items.forEach((it,i)=>{const d=Math.hypot(it.x-p.x,it.y-p.y);if(d<bd){bd=d;bi=i}});
+  if(bi>=0){Composite.remove(engine.world,items[bi].body);items.splice(bi,1);sfx.pop(3);ui()}return}
+ if(rem(tool)<=0){say(`No ${NAMES[tool].toLowerCase()}s left. Erase one to get it back.`);return}
+ const s=snap(p),L=LV[lvl];
+ if(Math.hypot(s.x-L.s[0],s.y-L.s[1])<45||Math.hypot(s.x-L.g[0],s.y-L.g[1])<45){say(`Too close to the marble or the vortex.`);return}
+ const it=mk(tool,s.x,s.y,flip);it.type=tool;it.x=s.x;it.y=s.y;it.flip=flip;items.push(it);Composite.add(engine.world,it.body);sfx.click();ui()});
+document.addEventListener('keydown',e=>{if(e.key==='r'||e.key==='R'){flip=!flip;ui()}});
+$('tools').addEventListener('click',e=>{const b=e.target.closest('.tool');if(b){tool=b.dataset.k;A();drone();sfx.click();ui()}});
+$('bFlip').onclick=()=>{flip=!flip;ui()};
+$('bSpd').onclick=()=>{speed=speed===1?2:1;$('bSpd').textContent=`Speed ${speed}x`};
+$('bReset').onclick=()=>{sfx.click();resetSim()};
+$('bClear').onclick=()=>{if(mode==='sim')return;items=[];resetSim();sfx.click()};
+$('bPlay').onclick=()=>{A();drone();
+ if(mode==='build'){const L=LV[lvl];marble=Bodies.circle(L.s[0],L.s[1],12,{restitution:.35,friction:.01,frictionAir:0,density:.001,label:'marble'});
+  Composite.add(engine.world,marble);mode='sim';$('bPlay').textContent='Running…';say(`Gravity returns. Watch.`)}
+ else if(mode==='won'&&lvl<SB-1){load(lvl+1)}
+ else if(mode==='won'||mode==='lost'){resetSim()}};
+$('bSnd').onclick=()=>{sound=!sound;$('bSnd').textContent=`Sound: ${sound?'on':'off'}`;if(dr)dr.gain.value=sound?.025:0;if(sound){A();drone()}};
+function openM(h){$('mbox').innerHTML=h+`<button onclick="closeM()">Close</button>`;$('modal').hidden=false}
+function closeM(){$('modal').hidden=true}
+$('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeM()});
+$('bLv').onclick=()=>openM(AREAS.map((a,k)=>`<h2>${a.k}</h2><p>${a.sub}</p>`+LV.map((l,i)=>l.a===k?`<button onclick="load(${i})">${l.n}${done[i]?' ✓':''}</button>`:'').join('')).join('')+`<h2>Free play</h2><button onclick="load(${SB})">Sandbox</button>`);
+$('bGd').onclick=()=>openM(`<h2>How to play</h2><p>1. Pick a tool and tap the canvas to place it. Items snap to a grid. Use Flip (or R, or right-click) to mirror a slope or turn a fan sideways.</p><p>2. Press Play to release the marble. Guide it into the vortex.</p><p>3. Black bulbs unlock deeper logs if you collect them before reaching the vortex.</p><p>4. Reset returns the marble. Clear removes everything you placed. The eraser removes a single item.</p><p>5. White Space is calm, Headspace is floaty, Faraway Town is normal, and Black Space is heavy and inverted.</p>`);
+
+/* ---------- simulation ---------- */
+function step(){
+ items.forEach(it=>{if(it.type==='fan'&&Bounds.contains(it.body.bounds,marble.position))Body.applyForce(marble,marble.position,{x:it.dir[0]*F_SIDE,y:it.dir[1]*F_UP})});
+ Engine.update(engine,1000/60);tick++;
+ const m=marble.position,L=LV[lvl];
+ if(tick%3===0){trail.push({x:m.x,y:m.y});if(trail.length>40)trail.shift()}
+ stars.forEach(s=>{if(!s.t&&Math.hypot(s.x-m.x,s.y-m.y)<22){s.t=true;got++;sfx.star();say(`Black bulb ${got} of ${stars.length}. Something hums.`)}});
+ if(Math.hypot(L.g[0]-m.x,L.g[1]-m.y)<26){mode='won';done[lvl]=true;sfx.win();
+  say(L.lore+(stars.length&&got===stars.length&&L.deep?`  Log ${String(lvl+1).padStart(2,'0')}: ${L.deep.replace(/^Log \d+: /,'')}`:stars.length&&got<stars.length?`  (A deeper log waits behind the bulbs you missed.)`:''));
+  $('bPlay').textContent=lvl<SB-1?'Next':'Replay';return}
+ still=Math.hypot(marble.velocity.x,marble.velocity.y)<.15?still+1:0;
+ if(still>150||m.y>H+40){mode='lost';say(`The memory slips away. Press Reset and try another path.`);$('bPlay').textContent='Retry'}}
+
+/* ---------- drawing ---------- */
+function R(n){const x=Math.sin(n*12.9898+TK*78.233)*43758.5453;return x-Math.floor(x)-.5}
+function line(a,b,c,d,k){ctx.beginPath();for(let p=0;p<2;p++){const o=k+p*7;ctx.moveTo(a+R(o)*3,b+R(o+1)*3);ctx.lineTo((a+c)/2+R(o+2)*3,(b+d)/2+R(o+3)*3);ctx.lineTo(c+R(o+4)*3,d+R(o+5)*3)}ctx.stroke()}
+function poly(v,hatch,fc){ctx.beginPath();v.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.fillStyle=fc||PAPER;ctx.fill();
+ if(hatch){ctx.save();ctx.clip();ctx.strokeStyle=GRAY;ctx.lineWidth=1;const xs=v.map(p=>p.x),ys=v.map(p=>p.y),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  ctx.beginPath();for(let x=x0-(y1-y0);x<x1;x+=9){ctx.moveTo(x,y1);ctx.lineTo(x+(y1-y0),y0)}ctx.stroke();ctx.restore()}
+ ctx.strokeStyle=INK;ctx.lineWidth=2.2;v.forEach((p,i)=>{const q=v[(i+1)%v.length];line(p.x,p.y,q.x,q.y,i*9)})}
+function blob(x,y,r,fill){for(let p=0;p<2;p++){ctx.beginPath();for(let i=0;i<=20;i++){const a=i/20*6.283,rr=r+R(i+p*30)*2;i?ctx.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr):ctx.moveTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr)}
+ if(fill&&!p){ctx.fillStyle=fill;ctx.fill()}ctx.stroke()}}
+function drawItem(it,ghost){const b=it.body;
+ if(it.type==='fan'){ctx.save();ctx.setLineDash([4,6]);ctx.strokeStyle=GRAY;ctx.lineWidth=1.5;const bb=b.bounds;ctx.strokeRect(bb.min.x,bb.min.y,bb.max.x-bb.min.x,bb.max.y-bb.min.y);ctx.restore();
+  ctx.strokeStyle=INK;ctx.lineWidth=2.2;const t=(performance.now()/500)%1;
+  for(let k=0;k<3;k++){const f=(t+k/3)%1,cx=it.dir[0]?it.x+20+f*120:it.x,cy=it.dir[0]?it.y:it.y-20-f*120;
+   ctx.beginPath();if(it.dir[0]){ctx.moveTo(cx-6,cy-8);ctx.lineTo(cx+4,cy);ctx.lineTo(cx-6,cy+8)}else{ctx.moveTo(cx-8,cy+6);ctx.lineTo(cx,cy-4);ctx.lineTo(cx+8,cy+6)}ctx.stroke()}
+  blob(it.x,it.y,11,PAPER);const a=mode==='sim'?performance.now()/120:0;ctx.beginPath();for(let k=0;k<2;k++){const q=a+k*1.571;ctx.moveTo(it.x-Math.cos(q)*10,it.y-Math.sin(q)*10);ctx.lineTo(it.x+Math.cos(q)*10,it.y+Math.sin(q)*10)}ctx.stroke();return}
+ poly(b.vertices,it.type!=='spring');
+ if(it.type==='spring'){ctx.strokeStyle=INK;ctx.beginPath();const x=b.position.x,y=b.position.y+7;ctx.moveTo(x-22,y);for(let k=0;k<6;k++)ctx.lineTo(x-22+k*8+4,y+(k%2?2:11));ctx.lineTo(x+22,y);ctx.stroke()}}
+function dot(x,y,r){ctx.beginPath();ctx.arc(x,y,r,0,6.283);ctx.fill()}
+function scenery(L){const t=performance.now()/1000;ctx.save();ctx.lineWidth=1.5;ctx.strokeStyle=INK;ctx.fillStyle=INK;
+ if(L.a===1){ctx.globalAlpha=.7;for(let k=0;k<45;k++)dot(k*97%W,(k*53+k*k*7)%(H-60),k%4?1:1.6);
+  ctx.globalAlpha=.45;
+  for(let k=0;k<7;k++){const x=(k*131+t*6)%(W+80)-40,y=70+(k*83)%340,s=k%3;ctx.save();ctx.translate(x,y);
+   if(s===0){blob(0,0,16);ctx.beginPath();ctx.ellipse(0,0,28,7,-.3,0,6.283);ctx.stroke()}
+   else if(s===1){ctx.strokeRect(-16,-8,32,12);[-13,11].forEach(px=>{ctx.beginPath();ctx.moveTo(px,4);ctx.lineTo(px,22);ctx.stroke()})}
+   else{ctx.beginPath();ctx.ellipse(0,0,26,7,0,0,6.283);ctx.stroke();ctx.beginPath();ctx.arc(0,-3,10,3.14,6.283);ctx.stroke()}
+   ctx.restore()}
+  ctx.globalAlpha=1;ctx.strokeStyle='#0b9fb0';ctx.lineWidth=2;
+  for(let k=0;k<9;k++){const x=k*100-10+(k%2)*20,y=H-52-(k%2)*10;for(let j=0;j<3;j++)blob(x+j*28-28,y+(j%2)*10,26,'#1fe3d0')}
+  ctx.fillStyle='#ff9bd8';for(let k=0;k<26;k++)dot(k*31+8,H-26+(k%3)*3,3)}
+ else if(L.a===2){ctx.lineWidth=2;ctx.fillStyle='#fff';ctx.globalAlpha=.85;
+  for(let k=0;k<6;k++){const x=(k*170+t*8)%1000-100,y=50+k*47%150;dot(x,y,26);dot(x+28,y+7,20);dot(x-26,y+9,17);dot(x+6,y+14,22)}
+  ctx.globalAlpha=1;
+  const tree=(x,y,r,c,d)=>{ctx.fillStyle='#6b4a28';ctx.fillRect(x-4,y+r-6,8,16);ctx.strokeStyle=d;ctx.lineWidth=2;[[0,0,r],[-r*.55,r*.3,r*.7],[r*.55,r*.3,r*.7]].forEach(q=>blob(x+q[0],y+q[1],q[2],c));ctx.fillStyle='#8af5b0';dot(x-r*.3,y-r*.35,r*.2)};
+  for(let k=0;k<11;k++)tree(k*76+14,440,30,'#1fd070','#0a9a52');
+  ctx.fillStyle='#f4efe4';ctx.fillRect(540,410,140,95);ctx.strokeStyle='#6b4a28';ctx.lineWidth=2;ctx.strokeRect(540,410,140,95);
+  ctx.fillStyle='#8fb8d6';[558,636].forEach(x=>{ctx.fillRect(x,430,26,22);ctx.strokeRect(x,430,26,22)});
+  ctx.beginPath();ctx.moveTo(520,415);ctx.lineTo(610,350);ctx.lineTo(700,415);ctx.closePath();ctx.fillStyle='#a8763e';ctx.fill();ctx.stroke();
+  ctx.fillStyle='#2a2a2a';ctx.fillRect(598,462,24,43);
+  ctx.fillStyle='#e3e1dc';ctx.fillRect(0,508,W,34);ctx.strokeStyle='#c9c6bf';ctx.lineWidth=1;ctx.beginPath();for(let x=0;x<W;x+=40){ctx.moveTo(x,508);ctx.lineTo(x,542)}ctx.stroke();
+  ctx.fillStyle='#8a8480';ctx.fillRect(0,542,W,38);ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.setLineDash([22,16]);ctx.beginPath();ctx.moveTo(0,561);ctx.lineTo(W,561);ctx.stroke();ctx.setLineDash([]);
+  for(let k=0;k<11;k++){const x=k*76+52;if(x>525&&x<700)continue;tree(x,500,26,'#14e07c','#0a9a52')}
+  const P=[30,170,410,650,790];ctx.strokeStyle='#4a3020';ctx.lineWidth=4;P.forEach(x=>{ctx.beginPath();ctx.moveTo(x,250);ctx.lineTo(x,548);ctx.moveTo(x-18,262);ctx.lineTo(x+18,262);ctx.stroke()});
+  ctx.strokeStyle=INK;ctx.lineWidth=1;for(let j=0;j<2;j++){ctx.beginPath();ctx.moveTo(P[0],262+j*8);for(let i=1;i<P.length;i++)ctx.quadraticCurveTo((P[i-1]+P[i])/2,282+j*8,P[i],262+j*8);ctx.stroke()}}
+ else if(L.a===3){ctx.globalAlpha=.9;
+  [[690,50],[40,230],[740,370],[120,450],[560,500]].forEach((d,k)=>{const dx=Math.sin(t/3+k)*4;ctx.strokeRect(d[0]+dx,d[1],32,50);dot(d[0]+dx+26,d[1]+26,1.5)});
+  const cy=150+Math.sin(t)*3;ctx.beginPath();ctx.moveTo(W*.62,0);ctx.lineTo(W*.62,cy);ctx.stroke();dot(W*.62,cy+5,4);
+  ctx.globalAlpha=.5;for(let k=0;k<24;k++)dot(k*79%W,k*131%H,1)}
+ else{ctx.strokeStyle=GRAY;ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,120);ctx.stroke();blob(W/2,130,9,PAPER);
+  for(let k=0;k<8;k++){const a=k*.785;ctx.beginPath();ctx.moveTo(W/2+Math.cos(a)*14,130+Math.sin(a)*14);ctx.lineTo(W/2+Math.cos(a)*19,130+Math.sin(a)*19);ctx.stroke()}
+  ctx.strokeRect(70,60,28,48);dot(90,86,1.5)}
+ ctx.restore()}
+function draw(){
+ const cs=getComputedStyle(document.documentElement);INK=cs.getPropertyValue('--ink').trim();PAPER=cs.getPropertyValue('--paper').trim();GRAY=cs.getPropertyValue('--gray').trim();
+ TK=Math.floor(performance.now()/170);const L=LV[lvl];
+ ctx.fillStyle=PAPER;ctx.fillRect(0,0,W,H);ctx.lineCap='round';ctx.lineJoin='round';
+ ctx.globalAlpha=.18;ctx.strokeStyle=GRAY;ctx.lineWidth=1;ctx.beginPath();for(let x=40;x<W;x+=40){ctx.moveTo(x,0);ctx.lineTo(x,H)}for(let y=40;y<H;y+=40){ctx.moveTo(0,y);ctx.lineTo(W,y)}ctx.stroke();ctx.globalAlpha=1;
+ scenery(L);
+ engine.world.bodies.filter(b=>b.label==='wall').forEach(b=>poly(b.vertices,true,L.a===2?(b.position.y===H-10?'#d8d5ce':'#b07c4a'):undefined));
+ /* start marker + vortex goal */
+ ctx.strokeStyle=GRAY;ctx.setLineDash([3,5]);ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(L.s[0],L.s[1],18,0,6.283);ctx.stroke();ctx.setLineDash([]);
+ ctx.strokeStyle=INK;ctx.lineWidth=2;const ph=performance.now()/500;ctx.beginPath();
+ for(let a=0;a<13;a+=.25){const r=a*2.3,x=L.g[0]+Math.cos(a-ph)*r+R(a*9)*1.5,y=L.g[1]+Math.sin(a-ph)*r+R(a*9+1)*1.5;a?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();
+ ctx.fillStyle=INK;ctx.beginPath();ctx.arc(L.g[0],L.g[1],8,0,6.283);ctx.fill();
+ stars.forEach(s=>{if(s.t)return;ctx.strokeStyle=INK;ctx.lineWidth=2;for(let k=0;k<8;k++){const a=k*.785+ph/3;ctx.beginPath();ctx.moveTo(s.x+Math.cos(a)*11,s.y+Math.sin(a)*11);ctx.lineTo(s.x+Math.cos(a)*16,s.y+Math.sin(a)*16);ctx.stroke()}
+  blob(s.x,s.y,8,INK)});
+ items.forEach(it=>drawItem(it));
+ /* ghost preview */
+ if(mouse&&mode==='build'){ctx.save();ctx.globalAlpha=.4;
+  if(tool==='erase'){ctx.setLineDash([4,5]);ctx.strokeStyle=INK;ctx.beginPath();ctx.arc(mouse.x,mouse.y,45,0,6.283);ctx.stroke()}
+  else if(rem(tool)>0){const s=snap(mouse),g=mk(tool,s.x,s.y,flip);g.type=tool;g.x=s.x;g.y=s.y;drawItem(g,true)}ctx.restore()}
+ trail.forEach((p,i)=>{ctx.globalAlpha=i/trail.length*.5;ctx.fillStyle=GRAY;ctx.beginPath();ctx.arc(p.x,p.y,3,0,6.283);ctx.fill()});ctx.globalAlpha=1;
+ if(marble){const m=marble.position;ctx.strokeStyle=INK;ctx.lineWidth=2;blob(m.x,m.y,12,INK);ctx.strokeStyle=PAPER;ctx.lineWidth=2;ctx.beginPath();ctx.arc(m.x,m.y,7,3.6,4.7);ctx.stroke()}
+ $('hud').textContent=stars.length?`Black bulbs ${got}/${stars.length}`:''}
+function frame(){if(mode==='sim')for(let s=0;s<speed;s++){if(mode==='sim')step()}draw();requestAnimationFrame(frame)}
+load(0);frame();
+</script></body></html>
